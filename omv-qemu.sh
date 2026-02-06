@@ -70,10 +70,17 @@ print_error() {
 
 confirm() {
     local prompt="$1"
+    local default="${2:-N}"
     local response
-    echo -en "${YELLOW}${prompt} [y/N]: ${NC}"
-    read -r response
-    [[ "$response" =~ ^[yY]$ ]]
+    if [[ "$default" == "Y" ]]; then
+        echo -en "${YELLOW}${prompt} [Y/n]: ${NC}"
+        read -r response
+        [[ ! "$response" =~ ^[nN]$ ]]
+    else
+        echo -en "${YELLOW}${prompt} [y/N]: ${NC}"
+        read -r response
+        [[ "$response" =~ ^[yY]$ ]]
+    fi
 }
 
 # =============================================================================
@@ -313,7 +320,7 @@ start_install() {
     echo "  $cmd"
     echo ""
 
-    if confirm "Start VM?"; then
+    if confirm "Start VM?" "Y"; then
         eval "$cmd"
     fi
 }
@@ -349,7 +356,7 @@ start_vm() {
     echo "  $cmd"
     echo ""
 
-    if confirm "Start VM?"; then
+    if confirm "Start VM?" "Y"; then
         eval "$cmd"
     fi
 }
