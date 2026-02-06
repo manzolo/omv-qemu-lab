@@ -250,13 +250,18 @@ build_qemu_cmd() {
     # System disk
     cmd+=" -drive file=${SYSTEM_DISK},format=qcow2,if=virtio"
 
-    # Storage disks (skip those marked as failed)
+    # Storage disks with unique serial numbers for RAID stability
     for i in $(seq 1 ${STORAGE_DISK_COUNT}); do
         local disk="${DISKS_DIR}/storage${i}.qcow2"
+        local serial="STORAGE${i}"
         if [[ -f "${disk}" ]]; then
-            cmd+=" -drive file=${disk},format=qcow2,if=virtio"
+            cmd+=" -drive file=${disk},format=qcow2,if=none,id=disk${i},serial=${serial}"
+            cmd+=" -device virtio-blk-pci,drive=disk${i},serial=${serial}"
         elif [[ -f "${disk}.failed" ]]; then
-            echo -e "${YELLOW}[WARNING]${NC} Disk storage${i} marked as failed - excluded from VM" >&2
+            echo -e "${YELLOW}[WARNING]${NC} Disk storage${i} marked as failed - using empty disk" >&2
+            # Use empty disk to maintain device order
+            cmd+=" -drive file=${disk}.failed,format=qcow2,if=none,id=disk${i},serial=${serial}"
+            cmd+=" -device virtio-blk-pci,drive=disk${i},serial=${serial}"
         fi
     done
 
@@ -393,18 +398,18 @@ show_status() {
         done
 
         # Show failed disks
-        for disk in "${DISKS_DIR}"/*.qcow2.failed; do
+        for disk in "${DISKS_DIR}"/*.qcow2.backup; do
             if [[ -f "$disk" ]]; then
                 local name
-                name=$(basename "$disk" .failed)
-                print_error "${name}: FAILED (simulated)"
+                name=$(basename "$disk" .backup)
+                print_error "${name}: FAILED (simulated, backup available)"
             fi
         done
 
         local count
         count=$(find "${DISKS_DIR}" -name "*.qcow2" 2>/dev/null | wc -l)
         local failed_count
-        failed_count=$(find "${DISKS_DIR}" -name "*.qcow2.failed" 2>/dev/null | wc -l)
+        failed_count=$(find "${DISKS_DIR}" -name "*.qcow2.backup" 2>/dev/null | wc -l)
         if [[ "$count" -eq 0 ]] && [[ "$failed_count" -eq 0 ]]; then
             print_warning "No disks created"
         fi
@@ -440,7 +445,7 @@ simulate_disk_failure() {
     print_header "Simulate Disk Failure"
 
     print_warning "This function simulates a disk failure for educational purposes."
-    print_info "The disk will be renamed with .failed extension"
+    print_info "The original disk will be backed up and replaced with an empty one"
     echo ""
 
     # Show available disks
@@ -448,12 +453,12 @@ simulate_disk_failure() {
     local available=()
     for i in $(seq 1 ${STORAGE_DISK_COUNT}); do
         local disk="${DISKS_DIR}/storage${i}.qcow2"
-        if [[ -f "${disk}" ]]; then
+        if [[ -f "${disk}" ]] && [[ ! -f "${disk}.backup" ]]; then
             local info
             info=$(qemu-img info "$disk" 2>/dev/null | grep "virtual size" | awk '{print $3}')
             echo "  ${i}. storage${i}.qcow2 (${info})"
             available+=("$i")
-        elif [[ -f "${disk}.failed" ]]; then
+        elif [[ -f "${disk}.backup" ]]; then
             echo -e "  ${i}. storage${i}.qcow2 ${RED}[ALREADY FAILED]${NC}"
         else
             echo -e "  ${i}. storage${i}.qcow2 ${YELLOW}[DOES NOT EXIST]${NC}"
@@ -481,20 +486,23 @@ simulate_disk_failure() {
 
     local disk="${DISKS_DIR}/storage${disk_num}.qcow2"
 
-    if [[ ! -f "${disk}" ]]; then
+    if [[ ! -f "${disk}" ]] || [[ -f "${disk}.backup" ]]; then
         print_error "Disk storage${disk_num} does not exist or is already failed"
         return 1
     fi
 
     if confirm "Confirm you want to simulate failure of storage${disk_num}?"; then
-        mv "${disk}" "${disk}.failed"
+        # Backup original disk and create empty replacement
+        mv "${disk}" "${disk}.backup"
+        qemu-img create -f qcow2 "${disk}.failed" "${STORAGE_DISK_SIZE}" >/dev/null
         echo ""
         print_success "Disk storage${disk_num} marked as failed!"
-        print_info "Disk has been renamed to: storage${disk_num}.qcow2.failed"
+        print_info "Original disk backed up to: storage${disk_num}.qcow2.backup"
+        print_info "Empty disk created: storage${disk_num}.qcow2.failed"
         echo ""
         print_info "Next steps:"
-        echo "  1. Start VM (option 4) - disk will not be present"
-        echo "  2. In OMV you will see RAID in degraded state"
+        echo "  1. Start VM (option 4) - RAID will be in degraded state"
+        echo "  2. In OMV you will see the RAID degraded with a missing disk"
         echo "  3. Use option 8 to 'replace' the failed disk"
     fi
 }
@@ -511,10 +519,10 @@ replace_failed_disk() {
     local failed=()
     for i in $(seq 1 ${STORAGE_DISK_COUNT}); do
         local disk="${DISKS_DIR}/storage${i}.qcow2"
-        if [[ -f "${disk}.failed" ]]; then
+        if [[ -f "${disk}.backup" ]]; then
             local info
-            info=$(qemu-img info "${disk}.failed" 2>/dev/null | grep "virtual size" | awk '{print $3}')
-            echo "  ${i}. storage${i}.qcow2.failed (${info})"
+            info=$(qemu-img info "${disk}.backup" 2>/dev/null | grep "virtual size" | awk '{print $3}')
+            echo "  ${i}. storage${i} (${info}) - original backed up"
             failed+=("$i")
         fi
     done
@@ -526,8 +534,8 @@ replace_failed_disk() {
     fi
 
     echo -e "${BOLD}Options:${NC}"
-    echo "  1. Restore original disk (simulate repair)"
-    echo "  2. Create new empty disk (simulate replacement)"
+    echo "  1. Restore original disk (simulate repair - data preserved)"
+    echo "  2. Create new empty disk (simulate replacement - rebuild RAID)"
     echo "  0. Cancel"
     echo ""
 
@@ -551,19 +559,22 @@ replace_failed_disk() {
 
             local disk="${DISKS_DIR}/storage${disk_num}.qcow2"
 
-            if [[ ! -f "${disk}.failed" ]]; then
+            if [[ ! -f "${disk}.backup" ]]; then
                 print_error "Disk storage${disk_num} is not marked as failed"
                 return 1
             fi
 
             if [[ "$option" == "1" ]]; then
                 # Restore original disk
-                mv "${disk}.failed" "${disk}"
+                rm -f "${disk}.failed"
+                mv "${disk}.backup" "${disk}"
                 echo ""
-                print_success "Disk storage${disk_num} restored!"
+                print_success "Disk storage${disk_num} restored with original data!"
+                print_info "RAID should automatically resync on next boot"
             else
                 # Create new disk
                 rm -f "${disk}.failed"
+                rm -f "${disk}.backup"
                 print_info "Creating new disk storage${disk_num} (${STORAGE_DISK_SIZE})..."
                 qemu-img create -f qcow2 "${disk}" "${STORAGE_DISK_SIZE}"
                 echo ""
@@ -575,7 +586,7 @@ replace_failed_disk() {
             print_info "Next steps:"
             echo "  1. Start VM (option 4)"
             echo "  2. In OMV, go to Storage → RAID Management"
-            echo "  3. Add the disk to RAID to rebuild it"
+            echo "  3. The RAID should rebuild automatically or add the disk manually"
             ;;
         *)
             print_error "Invalid option"
@@ -610,6 +621,7 @@ cleanup() {
     if [[ -d "${DISKS_DIR}" ]]; then
         rm -f "${DISKS_DIR}"/*.qcow2
         rm -f "${DISKS_DIR}"/*.qcow2.failed
+        rm -f "${DISKS_DIR}"/*.qcow2.backup
         print_success "Disks deleted"
     fi
 
