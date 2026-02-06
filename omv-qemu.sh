@@ -249,7 +249,7 @@ build_qemu_cmd() {
         if [[ -f "${disk}" ]]; then
             cmd+=" -drive file=${disk},format=qcow2,if=virtio"
         elif [[ -f "${disk}.failed" ]]; then
-            print_warning "Disk storage${i} marked as failed - excluded from VM"
+            echo -e "${YELLOW}[WARNING]${NC} Disk storage${i} marked as failed - excluded from VM" >&2
         fi
     done
 
