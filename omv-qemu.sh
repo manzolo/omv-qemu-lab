@@ -255,12 +255,12 @@ build_qemu_cmd() {
         local disk="${DISKS_DIR}/storage${i}.qcow2"
         local serial="STORAGE${i}"
         if [[ -f "${disk}" ]]; then
-            cmd+=" -drive file=${disk},format=qcow2,if=none,id=disk${i},serial=${serial}"
+            cmd+=" -drive file=${disk},format=qcow2,if=none,id=disk${i}"
             cmd+=" -device virtio-blk-pci,drive=disk${i},serial=${serial}"
         elif [[ -f "${disk}.failed" ]]; then
             echo -e "${YELLOW}[WARNING]${NC} Disk storage${i} marked as failed - using empty disk" >&2
             # Use empty disk to maintain device order
-            cmd+=" -drive file=${disk}.failed,format=qcow2,if=none,id=disk${i},serial=${serial}"
+            cmd+=" -drive file=${disk}.failed,format=qcow2,if=none,id=disk${i}"
             cmd+=" -device virtio-blk-pci,drive=disk${i},serial=${serial}"
         fi
     done
