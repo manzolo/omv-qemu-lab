@@ -1,0 +1,16 @@
+# Virtual disks
+disks/
+
+# ISO files
+iso/
+
+# Mounted directories
+mnt/
+
+# Backup files
+*.bak
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
