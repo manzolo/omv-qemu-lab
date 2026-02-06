@@ -76,15 +76,25 @@ After the VM is running:
 | Web UI      | http://localhost:8080                            | admin / openmediavault         |
 | SSH         | `ssh -p 2222 root@localhost`                     | (set during installation)      |
 | Samba       | `smbclient -p 4450 -L localhost -U username`     | (configured in OMV)            |
-| FileBrowser | http://localhost:3670                            | (after installing plugin)      |
+| FileBrowser | http://localhost:3670                            | (after installing openmediavault-filebrowser plugin) |
 
 ## Lab Exercises
 
-### Exercise 1: Create a RAID Array
+### Exercise 1: Install RAID Plugin and Create a RAID Array
+
+#### Install the Software RAID Plugin
 
 1. Access OMV Web UI at http://localhost:8080
-2. Go to **Storage → Disks** - you should see vdb, vdc, vdd, vde
-3. Go to **Storage → RAID Management**
+2. Go to **System → Plugins**
+3. Search for **openmediavault-md** (Software RAID)
+4. Select it and click **Install**
+5. Wait for installation to complete
+6. The **Storage → RAID Management** menu will now be available
+
+#### Create a RAID Array
+
+1. Go to **Storage → Disks** - you should see vdb, vdc, vdd, vde
+2. Go to **Storage → RAID Management**
 4. Create a new RAID array:
    - RAID 1 (mirror): Select 2 disks
    - RAID 5: Select 3+ disks
