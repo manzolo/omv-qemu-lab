@@ -65,7 +65,10 @@ Follow the menu options in order:
 3. **Install OMV** - Boots from ISO to install OpenMediaVault
    - Select `/dev/vda` as the installation target
    - Complete the Debian installer
-4. **Start VM** - Boots the installed system
+   - **Important:** When installation is complete, shutdown the VM (don't reboot)
+4. **Start VM** - Boots the installed system (use this after installation)
+
+> **Note:** After installation, always use option **4. Start VM** to boot. Option 3 will boot from the ISO again and restart the installer.
 
 ## Accessing OpenMediaVault
 
